@@ -14,7 +14,7 @@
 
 void generate_random_graph(int *output, int graph_size) {
   int i, j;
-
+  int counter = 0;
   srand(0xdadadada);
 
   for (i = 0; i < graph_size; i++) {
@@ -25,13 +25,18 @@ void generate_random_graph(int *output, int graph_size) {
         int r;
         r = rand() % 40;
         if (r > 20) {
-          r = INF;
+          //r = INF;
         }
 
         D(i, j) = r;
+        if(r == 0){
+          counter++;
+          D(i, j) = 1;
+        }
       }
     }
   }
+  printf("counter:%d\n", counter);
 }
 
 __global__ void gpu_calculate(int k, int graph_size, int *output) {
@@ -49,7 +54,7 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
   int size = sizeof(int) * graph_size * graph_size;
   cudaMalloc(&dev, size);
   cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
-  for (int k = 0; k < graph_size-100; k++) {
+  for (int k = 0; k < graph_size; k++) {
     gpu_calculate<<<blocks, threads>>>(k, graph_size, dev);
   }
   cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
@@ -61,11 +66,7 @@ void floyd_warshall_cpu(const int *graph, int graph_size, int *output) {
 
   memcpy(output, graph, sizeof(int) * graph_size * graph_size);
 
-  /*for (int l = 0; l < 100; l++) {
-    printf("cpu output:%d\n", output[l]);
-  }*/
-
-  /*for (k = 0; k < graph_size; k++) {
+  for (k = 0; k < graph_size; k++) {
     for (i = 0; i < graph_size; i++) {
       for (j = 0; j < graph_size; j++) {
         if (D(i, k) + D(k, j) < D(i, j)) {
@@ -73,10 +74,7 @@ void floyd_warshall_cpu(const int *graph, int graph_size, int *output) {
         }
       }
     }
-  }*/
-  /*for (int l = 0; l < 100; l++) {
-    printf("cpu output:%d\n", output[l]);
-  }*/
+  }
 }
 
 int main(int argc, char **argv) {
@@ -99,7 +97,7 @@ int main(int argc, char **argv) {
 
   output_cpu = (int *)malloc(size);
   assert(output_cpu);
-  //memset(output_cpu, 0, size);
+  memset(output_cpu, 0, size);
 
   output_gpu = (int *)malloc(size);
   assert(output_gpu);
@@ -121,10 +119,10 @@ int main(int argc, char **argv) {
   if (memcmp(output_cpu, output_gpu, size) != 0) {
     fprintf(stderr, "FAIL!\n");
   } else {
-    for (int k = 500; k < 600; k++) {
+    for (int k = 500; k < 550; k++) {
       printf("cpu:%d gpu:%d origin:%d\n", output_cpu[k], output_gpu[k], graph[k]);
     }
-    
+    printf("OK\n");
   }
 
   return 0;

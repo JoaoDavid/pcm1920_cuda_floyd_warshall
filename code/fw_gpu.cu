@@ -5,7 +5,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#define GRAPH_SIZE 2000
+#define GRAPH_SIZE 400
 
 #define EDGE_COST(graph, graph_size, a, b) graph[a * graph_size + b]
 #define D(a, b) EDGE_COST(output, graph_size, a, b)
@@ -34,14 +34,39 @@ void generate_random_graph(int *output, int graph_size) {
   }
 }
 
+__global__ void gpu_calculate(int k, int graph_size, int *output) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    if (D(i, k) + D(k, j) < D(i, j)) {
+      D(i, j) = D(i, k) + D(k, j);
+    }
+}
+
 void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
-  // TODO
+  dim3    blocks(GRAPH_SIZE/16,GRAPH_SIZE/16);
+  dim3    threads(16,16);
+  int *dev;
+  int size = sizeof(int) * graph_size * graph_size;
+  cudaMalloc(&dev, size);
+  cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
+  for (int k = 0; k < graph_size; k++) {
+    gpu_calculate<<<blocks, threads>>>(k, graph_size, dev);
+  }
+  //cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
+  cudaFree(dev);  
 }
 
 void floyd_warshall_cpu(const int *graph, int graph_size, int *output) {
   int i, j, k;
 
   memcpy(output, graph, sizeof(int) * graph_size * graph_size);
+  if (memcmp(output graph, size) != 0) {
+    fprintf(stderr, "FAIL!\n");
+  } 
+
+  /*for (int l = 0; l < 100; l++) {
+    printf("cpu output:%d\n", output[l]);
+  }*/
 
   for (k = 0; k < graph_size; k++) {
     for (i = 0; i < graph_size; i++) {
@@ -52,6 +77,12 @@ void floyd_warshall_cpu(const int *graph, int graph_size, int *output) {
       }
     }
   }
+  /*for (int l = 0; l < 100; l++) {
+    printf("cpu output:%d\n", output[l]);
+  }*/
+  if (memcmp(output graph, size) != 0) {
+    fprintf(stderr, "FAIL!\n");
+  } 
 }
 
 int main(int argc, char **argv) {
@@ -89,12 +120,17 @@ int main(int argc, char **argv) {
 
   fprintf(stderr, "running on gpu...\n");
   TIMER_START();
-  floyd_warshall_gpu(graph, GRAPH_SIZE, output_gpu);
+  //floyd_warshall_gpu(graph, GRAPH_SIZE, output_gpu);
   TIMER_STOP();
   fprintf(stderr, "%f secs\n", time_delta);
 
   if (memcmp(output_cpu, output_gpu, size) != 0) {
     fprintf(stderr, "FAIL!\n");
+  } else {
+    for (int k = 500; k < 1000; k++) {
+      //printf("cpu:%d gpu:%d origin:%d\n", output_cpu[k], output_gpu[k], graph[k]);
+    }
+    
   }
 
   return 0;

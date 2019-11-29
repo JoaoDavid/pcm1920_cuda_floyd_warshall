@@ -39,23 +39,39 @@ void generate_random_graph(int *output, int graph_size) {
   printf("counter:%d\n", counter);
 }
 
+int gcd(int a, int b) { 
+    if (b == 0) {
+      return a; 
+    }        
+    return gcd(b, a % b);  
+} 
+
 __global__ void gpu_calculate(int k, int graph_size, int *output) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (D(i, k) + D(k, j) < D(i, j)) {
-      D(i, j) = D(i, k) + D(k, j);
-    }
+    if(i < GRAPH_SIZE && j < GRAPH_SIZE){
+      if (D(i, k) + D(k, j) < D(i, j)) {
+        D(i, j) = D(i, k) + D(k, j);
+      }
+    }    
 }
 
 void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
-  dim3    blocks(GRAPH_SIZE/16,GRAPH_SIZE/16);
-  dim3    threads(16,16);
+  int threads = gcd(GRAPH_SIZE,32);
+  /*if(threads == 1){
+    double aux = GRAPH_SIZE / 16;
+    threads = ceil(aux);
+  }*/
+  threads = 16;
+  printf("threads per block %d x %d\n",threads,threads);
+  dim3 threadsPerBlock(threads, threads);
+  dim3 numBlocks(GRAPH_SIZE / threadsPerBlock.x, GRAPH_SIZE / threadsPerBlock.y); 
   int *dev;
   int size = sizeof(int) * graph_size * graph_size;
   cudaMalloc(&dev, size);
   cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
   for (int k = 0; k < graph_size; k++) {
-    gpu_calculate<<<blocks, threads>>>(k, graph_size, dev);
+    gpu_calculate<<<numBlocks, threadsPerBlock>>>(k, graph_size, dev);
   }
   cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
   cudaFree(dev);  
@@ -106,7 +122,7 @@ int main(int argc, char **argv) {
 
   fprintf(stderr, "running on cpu...\n");
   TIMER_START();
-  floyd_warshall_cpu(graph, GRAPH_SIZE, output_cpu);
+  //floyd_warshall_cpu(graph, GRAPH_SIZE, output_cpu);
   TIMER_STOP();
   fprintf(stderr, "%f secs\n", time_delta);
 

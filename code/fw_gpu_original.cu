@@ -5,7 +5,8 @@
 #include <string.h>
 #include <sys/time.h>
 
-#define GRAPH_SIZE 2000
+#define GRAPH_SIZE 1999
+
 #define EDGE_COST(graph, graph_size, a, b) graph[a * graph_size + b]
 #define D(a, b) EDGE_COST(output, graph_size, a, b)
 
@@ -49,24 +50,8 @@ __global__ void gpu_calculate(int k, int graph_size, int *output, int threads) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     if(i < GRAPH_SIZE && j < GRAPH_SIZE){
-      extern __shared__ int shared[];
-      int* frozenZoneHoriz = &shared[0];
-      int* frozenZoneVert = &shared[threads];
-      if(threadIdx.y == 0){
-        frozenZoneHoriz[threadIdx.x] = D(i, k);
-      }
-      if(threadIdx.x == 0){
-        frozenZoneVert[threadIdx.y] = D(k, j);
-      }
-      /*if(threadIdx.x == threadIdx.y){
-        frozenZoneHoriz[threadIdx.x] = D(i, k);
-        frozenZoneVert[threadIdx.y] = D(k, j);
-      }*/
-      
-      __syncthreads();
-
-      if (frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y] < D(i, j)) {
-        D(i, j) = frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y];
+      if (D(i, k) + D(k, j) < D(i, j)) {
+        D(i, j) = D(i, k) + D(k, j);
       }
     }
 }
@@ -75,11 +60,13 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
   int threads = gcd(GRAPH_SIZE,32);
   int blocks;
   if(threads == 1){
-    threads = 16;    
-  } /*else {
+    threads = 16;//ceil(aux);
+    double aux = (double)GRAPH_SIZE / (double)threads;
+    blocks = ceil(aux);
+  } else {
     blocks = GRAPH_SIZE / threads;
-  }*/
-  blocks = ceil((double)GRAPH_SIZE / (double)threads);
+  }
+  //threads = 16;
   printf("threads per block %d x %d\n",threads,threads);
   printf("numBlocks %d x %d\n",blocks,blocks);
   printf("total threads %d\n",blocks*blocks*threads*threads);
@@ -88,11 +75,11 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
   dim3 numBlocks(blocks, blocks); 
   //dim3 numBlocks(GRAPH_SIZE / threadsPerBlock.x, GRAPH_SIZE / threadsPerBlock.y); 
   int *dev;
-  int size = sizeof(int) * GRAPH_SIZE * GRAPH_SIZE;
+  int size = sizeof(int) * graph_size * graph_size;
   cudaMalloc(&dev, size);
   cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
-  for (int k = 0; k < GRAPH_SIZE; k++) {
-    gpu_calculate<<<numBlocks, threadsPerBlock, sizeof(int) * threads * 2>>>(k, GRAPH_SIZE, dev, threads);
+  for (int k = 0; k < graph_size; k++) {
+    gpu_calculate<<<numBlocks, threadsPerBlock, sizeof(int) * threads * 2>>>(k, graph_size, dev, threads);
   }
   cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
   cudaFree(dev);  

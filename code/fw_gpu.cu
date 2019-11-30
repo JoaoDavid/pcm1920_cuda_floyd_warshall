@@ -46,12 +46,37 @@ int gcd(int a, int b) {
     return gcd(b, a % b);  
 } 
 
-__global__ void gpu_calculate(int k, int graph_size, int *output) {
+__global__ void gpu_calculate(int k, int graph_size, int *output, int threads) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    extern __shared__ int shared[];
+    int* frozenZoneHoriz = &shared[0];
+    int* frozenZoneVert = &shared[threads];
+    /*if(threadIdx.y == 0){
+      frozenZoneHoriz[threadIdx.x] = D(i, k);
+    }
+    if(threadIdx.x == 0){
+      frozenZoneVert[threadIdx.y] = D(k, j);
+    }*/
+    if(threadIdx.x == threadIdx.y){
+      frozenZoneHoriz[threadIdx.x] = D(i, k);
+      frozenZoneVert[threadIdx.y] = D(k, j);
+    }
+    
+    __syncthreads();
+    /*int iK = D(i, k);
+    int kJ = D(k, j);
+    int iJ = D(i, j);*/
     if(i < GRAPH_SIZE && j < GRAPH_SIZE){
-      if (D(i, k) + D(k, j) < D(i, j)) {
-        D(i, j) = D(i, k) + D(k, j);
+      /*if (iK + kJ < iJ) {
+        //D(i, j) = D(i, k) + D(k, j);
+        D(i, j) = iK + kJ;
+      }*/
+      if (frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y] < D(i, j)) {
+        //D(i, j) = D(i, k) + D(k, j);
+        D(i, j) = frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y];
+        //D(i, j) = frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y];
       }
     }    
 }
@@ -71,7 +96,7 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
   cudaMalloc(&dev, size);
   cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
   for (int k = 0; k < graph_size; k++) {
-    gpu_calculate<<<numBlocks, threadsPerBlock>>>(k, graph_size, dev);
+    gpu_calculate<<<numBlocks, threadsPerBlock, sizeof(int) * threads * 2>>>(k, graph_size, dev, threads);
   }
   cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
   cudaFree(dev);  
@@ -122,7 +147,7 @@ int main(int argc, char **argv) {
 
   fprintf(stderr, "running on cpu...\n");
   TIMER_START();
-  //floyd_warshall_cpu(graph, GRAPH_SIZE, output_cpu);
+  floyd_warshall_cpu(graph, GRAPH_SIZE, output_cpu);
   TIMER_STOP();
   fprintf(stderr, "%f secs\n", time_delta);
 
@@ -135,9 +160,9 @@ int main(int argc, char **argv) {
   if (memcmp(output_cpu, output_gpu, size) != 0) {
     fprintf(stderr, "FAIL!\n");
   } else {
-    for (int k = 500; k < 550; k++) {
+    /*for (int k = 500; k < 550; k++) {
       printf("cpu:%d gpu:%d origin:%d\n", output_cpu[k], output_gpu[k], graph[k]);
-    }
+    }*/
     printf("OK\n");
   }
 

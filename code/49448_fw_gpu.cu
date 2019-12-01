@@ -77,11 +77,6 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
   int blockSideLen = calculate_blockSideLen();
   int gridSideLen = ceil((double)GRAPH_SIZE / (double)blockSideLen);
 
-  printf("threads per block %d x %d\n",blockSideLen,blockSideLen);
-  printf("numBlocks %d x %d\n",gridSideLen,gridSideLen);
-  printf("total threads %d\n",gridSideLen*gridSideLen*blockSideLen*blockSideLen);
-  printf("total matrix entries %d\n",GRAPH_SIZE*GRAPH_SIZE);
-  printf("GRAPH_SIZE %d\n",GRAPH_SIZE);
   dim3 threadsPerBlock(blockSideLen, blockSideLen);
   dim3 numBlocks(gridSideLen, gridSideLen); 
 

@@ -41,11 +41,14 @@ void generate_random_graph(int *output, int graph_size) {
   }
 }
 
-int gcd(int a, int b) { 
-    if (b == 0) {
-      return a; 
-    }        
-    return gcd(b, a % b);  
+int calculate_blockSideLen() { 
+  if(GRAPH_SIZE % 16 == 0){
+    return 16;
+  } else if (GRAPH_SIZE % 8 == 0){
+    return 8;
+  } else {
+    return 16;
+  }
 } 
 
 __global__ void gpu_compute_floyd_warshall(int k, int graph_size, int *output, int blockSideLen) {
@@ -71,12 +74,14 @@ __global__ void gpu_compute_floyd_warshall(int k, int graph_size, int *output, i
 }
 
 void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
-  int blockSideLen = gcd(GRAPH_SIZE,32);
-  int gridSideLen;
-  if(blockSideLen == 1){
-    blockSideLen = 16;    
-  }
-  gridSideLen = ceil((double)GRAPH_SIZE / (double)blockSideLen);
+  int blockSideLen = calculate_blockSideLen();
+  int gridSideLen = ceil((double)GRAPH_SIZE / (double)blockSideLen);
+
+  printf("threads per block %d x %d\n",blockSideLen,blockSideLen);
+  printf("numBlocks %d x %d\n",gridSideLen,gridSideLen);
+  printf("total threads %d\n",gridSideLen*gridSideLen*blockSideLen*blockSideLen);
+  printf("total matrix entries %d\n",GRAPH_SIZE*GRAPH_SIZE);
+  printf("GRAPH_SIZE %d\n",GRAPH_SIZE);
   dim3 threadsPerBlock(blockSideLen, blockSideLen);
   dim3 numBlocks(gridSideLen, gridSideLen); 
 

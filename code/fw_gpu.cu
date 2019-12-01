@@ -1,3 +1,11 @@
+/*
+ * Cluster and Multicore Programming
+ * Department of Informatics
+ * Faculty of Sciences
+ * University of Lisbon
+ * November 30, 2019
+ * João David n49448
+ */
 #include <assert.h>
 #include <cuda.h>
 #include <stdio.h>
@@ -45,24 +53,20 @@ int gcd(int a, int b) {
     return gcd(b, a % b);  
 } 
 
-__global__ void gpu_calculate(int k, int graph_size, int *output, int threads) {
+__global__ void gpu_compute_floyd_warshall(int k, int graph_size, int *output, int blockSideLen) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     if(i < GRAPH_SIZE && j < GRAPH_SIZE){
       extern __shared__ int shared[];
       int* frozenZoneHoriz = &shared[0];
-      int* frozenZoneVert = &shared[threads];
+      int* frozenZoneVert = &shared[blockSideLen];
       if(threadIdx.y == 0){
         frozenZoneHoriz[threadIdx.x] = D(i, k);
       }
       if(threadIdx.x == 0){
         frozenZoneVert[threadIdx.y] = D(k, j);
       }
-      /*if(threadIdx.x == threadIdx.y){
-        frozenZoneHoriz[threadIdx.x] = D(i, k);
-        frozenZoneVert[threadIdx.y] = D(k, j);
-      }*/
-      
+
       __syncthreads();
 
       if (frozenZoneHoriz[threadIdx.x] + frozenZoneVert[threadIdx.y] < D(i, j)) {
@@ -72,27 +76,25 @@ __global__ void gpu_calculate(int k, int graph_size, int *output, int threads) {
 }
 
 void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
-  int threads = gcd(GRAPH_SIZE,32);
-  int blocks;
-  if(threads == 1){
-    threads = 16;    
-  } /*else {
-    blocks = GRAPH_SIZE / threads;
-  }*/
-  blocks = ceil((double)GRAPH_SIZE / (double)threads);
-  printf("threads per block %d x %d\n",threads,threads);
-  printf("numBlocks %d x %d\n",blocks,blocks);
-  printf("total threads %d\n",blocks*blocks*threads*threads);
+  int blockSideLen = gcd(GRAPH_SIZE,32);
+  int gridSideLen;
+  if(blockSideLen == 1){
+    blockSideLen = 16;    
+  }
+  gridSideLen = ceil((double)GRAPH_SIZE / (double)blockSideLen);
+
+  printf("threads per block %d x %d\n",blockSideLen,blockSideLen);
+  printf("numBlocks %d x %d\n",gridSideLen,gridSideLen);
+  printf("total threads %d\n",gridSideLen*gridSideLen*blockSideLen*blockSideLen);
   printf("total matrix entries %d\n",GRAPH_SIZE*GRAPH_SIZE);
-  dim3 threadsPerBlock(threads, threads);
-  dim3 numBlocks(blocks, blocks); 
-  //dim3 numBlocks(GRAPH_SIZE / threadsPerBlock.x, GRAPH_SIZE / threadsPerBlock.y); 
+  dim3 threadsPerBlock(blockSideLen, blockSideLen);
+  dim3 numBlocks(gridSideLen, gridSideLen); 
   int *dev;
   int size = sizeof(int) * GRAPH_SIZE * GRAPH_SIZE;
   cudaMalloc(&dev, size);
   cudaMemcpy(dev, graph, size, cudaMemcpyHostToDevice);
   for (int k = 0; k < GRAPH_SIZE; k++) {
-    gpu_calculate<<<numBlocks, threadsPerBlock, sizeof(int) * threads * 2>>>(k, GRAPH_SIZE, dev, threads);
+    gpu_compute_floyd_warshall<<<numBlocks, threadsPerBlock, sizeof(int) * blockSideLen * 2>>>(k, GRAPH_SIZE, dev, blockSideLen);
   }
   cudaMemcpy(output, dev, size, cudaMemcpyDeviceToHost);
   cudaFree(dev);  
@@ -156,9 +158,6 @@ int main(int argc, char **argv) {
   if (memcmp(output_cpu, output_gpu, size) != 0) {
     fprintf(stderr, "FAIL!\n");
   } else {
-    /*for (int k = 500; k < 550; k++) {
-      printf("cpu:%d gpu:%d origin:%d\n", output_cpu[k], output_gpu[k], graph[k]);
-    }*/
     printf("OK\n");
   }
 

@@ -21,7 +21,7 @@
 
 void generate_random_graph(int *output, int graph_size) {
   int i, j;
-  int counter = 0;
+
   srand(0xdadadada);
 
   for (i = 0; i < graph_size; i++) {
@@ -32,18 +32,13 @@ void generate_random_graph(int *output, int graph_size) {
         int r;
         r = rand() % 40;
         if (r > 20) {
-          //r = INF;
+          r = INF;
         }
 
         D(i, j) = r;
-        if(r == 0){
-          counter++;
-          D(i, j) = 1;
-        }
       }
     }
   }
-  printf("counter:%d\n", counter);
 }
 
 int gcd(int a, int b) { 
@@ -82,13 +77,9 @@ void floyd_warshall_gpu(const int *graph, int graph_size, int *output) {
     blockSideLen = 16;    
   }
   gridSideLen = ceil((double)GRAPH_SIZE / (double)blockSideLen);
-
-  printf("threads per block %d x %d\n",blockSideLen,blockSideLen);
-  printf("numBlocks %d x %d\n",gridSideLen,gridSideLen);
-  printf("total threads %d\n",gridSideLen*gridSideLen*blockSideLen*blockSideLen);
-  printf("total matrix entries %d\n",GRAPH_SIZE*GRAPH_SIZE);
   dim3 threadsPerBlock(blockSideLen, blockSideLen);
   dim3 numBlocks(gridSideLen, gridSideLen); 
+
   int *dev;
   int size = sizeof(int) * GRAPH_SIZE * GRAPH_SIZE;
   cudaMalloc(&dev, size);
